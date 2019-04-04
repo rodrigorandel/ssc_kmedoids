@@ -33,3 +33,10 @@
 
 #instance folders
 twocircles/*
+pendigits/*
+Instances/*
+InstancesConst/*
+
+#other files
+*.txt
+cplex.log
