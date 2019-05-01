@@ -5,6 +5,8 @@
  *      Author: rodrigorandel
  */
 
+//#include <boost/archive/text_oarchive.hpp>
+//#include <boost/archive/text_iarchive.hpp>
 #include <algorithm>
 #include <getopt.h>
 #include <cstdio>
@@ -13,10 +15,11 @@
 #include <string>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 
 #include "Constraints.h"
 #include "Instance.h"
-#include "Model.h"
+//#include "Model.h"
 #include "Solution.h"
 #include "Vns.h"
 #include "Helper.h"
@@ -25,155 +28,107 @@ using namespace std;
 double timeLimit,value_exact;
 int k_max, p_medians, x_execs;
 int improvement;
+bool read_initial_sulution;
+bool write_solution;
 char* instance_file = nullptr;
 char* constraints_file = nullptr;
 char* distances_file = nullptr;
-char* solution_file = nullptr;
-bool b = false;
 
 Solution* bestSol = nullptr;
-Model* model = nullptr;
-Performance* performance = nullptr;
+//Model* model = nullptr;
 Instance* instance = nullptr;
 
-long double ri,ari;
-
-void ARI(long double* ri, long double* ari, Solution* s, Performance* performance);
 void init(int argc, char* argv[]);
-void executeExact();
 void executeVNS();
+
 
 int main(int argc, char* argv[]) {
 
 	init(argc, argv);
-//    cout << "lendo instancia" << endl;
 	instance = new Instance(instance_file, p_medians,distances_file);
-    b = 0;
-	if(b){
-		/** --- EXACT MODEL-- */
-		executeExact();
-	}
 
 	/** --- VNS_PPMSS --- */
     executeVNS();
 
-	//cout << "RL = " << setprecision(2) << 100*(bestSol->getCost()-(value_exact))/bestSol->getCost() << "%" << endl;
-
-	if(b){
-//		if(solution_file != nullptr){
-//			long double ri,ari;
-//			ARI(&ri,&ari,bestSol,performance);
-//			cout << "-1\t" << fixed << setprecision(3) << ari  << "\t" << ri << endl;
-//		}
-		cout << model->isInteger() << " " << value_exact <<  endl;
-		double v;
-		string name;
-		model->getCannotLinkRelaxationGap(&v, &name);
-		//cout << "Cannot-link = " << name << " = " << v << endl;
-		//cout << "GAP = " << setprecision(2) << 100*(bestSol->getCost()-(value_exact+v))/bestSol->getCost() << "%" << endl;
-
-		double v2;
-		string name2;
-		model->getMustLinkRelaxationGap(&v2, &name2);
-		//cout << "Must-link = " << name2 << " = " << v2 << endl;
-		//cout << "GAP = " << setprecision(2) << 100*(bestSol->getCost()-(value_exact+v2))/bestSol->getCost() << "%" << endl;
-
-
-
-	}else{
-//        cout << scientific << setprecision(8) << bestSol->getCost();
-		if(solution_file != nullptr){
-			//long double ri,ari;
-			//ARI(&ri,&ari,bestSol,performance);
-			//cout << setprecision(2) << fixed << "RI = " << ri << "\tARI = " << ari << endl;
-//            cout << "\t" << fixed << setprecision(3) << ari/x_execs  << "\t" << ri/x_execs << endl;
-            cout << fixed << setprecision(2) << ari << endl;
-        }
-
-	}
-
 
 	delete bestSol;
-	delete model;
+//	delete model;
 	delete instance;
-	delete performance;
 	delete[] instance_file;
 	delete[] constraints_file;
 	if(distances_file != nullptr){
 		delete [] distances_file;
-	}
-	if(solution_file != nullptr){
-		delete [] solution_file;
 	}
 	return 0;
 }
 
 
 void executeVNS(){
-	performance = new Performance();
-//     cout << "lendo constraints" << endl;
 	Constraints* constraints = new Constraints(constraints_file, instance);
-//    cout << "iniciando solucao" << endl;
 	Solution* sol = new Solution(instance, constraints);
+//	if(read_initial_sulution){
+//		ifstream ifs("solution");
+//		boost::archive::text_iarchive ia(ifs);
+//		ia >> *sol;
+//		cout << "leu solucao base " << sol->getCost() << endl;
+//		sol->updateFeasibility();
+//	}
+
 	bestSol = new Solution(instance, constraints);
 
-//    cout << "vai comecar" << endl;
-	Vns *vns = new Vns(instance, constraints, performance);
-
+	Vns *vns = new Vns(instance, constraints);
+	double sum = 0;
 	FOR(i,0,x_execs){
-		vns->run(sol, k_max, improvement, i + 1, timeLimit);
-//        cout << "ok" << endl;
-		long double old_ri = ri;
-		long double old_ari = ari;
-		ARI(&ri,&ari,sol,performance);
-		ri += old_ri;
-		ari += old_ari;
-		if (sol->getCost() <= performance->bestCost) {
+		vns->run(sol, k_max, improvement, i + 1, timeLimit, read_initial_sulution);
+		sum += sol->getCost();
+		if (*sol < *bestSol) {
 			*bestSol = *sol;
 		}
 	}
+//	if(write_solution){
+//		cout << "vai escrever solucao base " << bestSol->getCost() << endl;
+//		ofstream ofs("solution");
+//		boost::archive::text_oarchive oa(ofs);
+//		oa << *bestSol;
+//		cout << "Facilities" << endl;
+//		FOR(j,0,instance->getM())
+//		{
+//			cout << "\t" << bestSol->getFacilities()[j];
+//		}
+//		cout << "\nPOS" << endl;
+//		FOR(j,0,instance->getM())
+//		{
+//			cout << "\t" << bestSol->getPos()[j];
+//		}
+//		cout << "\nC1" << endl;
+//		FOR(j,0,instance->getN())
+//		{
+//			cout << "\t" << bestSol->getC1()[j];
+//		}
+//		cout << "\nC2" << endl;
+//		FOR(j,0,instance->getN())
+//		{
+//			cout << "\t" << bestSol->getC2()[j];
+//		}
+//	}
 
-	/* Just to check... */
-//	cout << "BEST SOLUTION FOUND " <<  bestSol->isFeasible() <<  endl;
-	//bestSol->print();
-	//cout << "------------------- Config = " << constraints_file << " ------------------" << endl << endl;
-	//performance->printLatexTable(x_execs, value_exact);
-	//performance->print(instance, improvement, x_execs, k_max);
-	//if(solution_file != nullptr){
-		//long double ri,ari;
-		//ARI(&ri,&ari,bestSol,performance);
-		//cout << setprecision(2) << fixed << "RI = " << ri << "\tARI = " << ari << endl;
-		//cout << setprecision(2) << fixed << ari << endl;
-	//}
-	//cout << endl << endl;
-
-//	int a,b,cluster;
-//	double d;
-//	cluster = bestSol->maxDiameter(&a,&b,&d);
-//	cout << "DIAMETER  [" << a << "," << b << "] = " << d << " NO CLUSTER " << cluster << endl;
-//	cluster = bestSol->minSplit(&a,&b,&d);
-//	cout << "SPLIT  [" << a << "," << b << "] = " << d << " NO CLUSTER " << cluster << endl;
-
+//	cout << "escrever cost " << bestSol->getCost() << endl;
+//	ofstream ofs("out.txt");
+	cout << sum/x_execs << endl;
+//	ofs.close();
 
 	delete constraints;
 	delete sol;
 	delete vns;
 }
 
-void executeExact(){
-	model = new Model(instance);
-	model->buildModel();
-	model->addConstraints(constraints_file);
-    model->exportModel();
-	model->solve();
-	value_exact = model->getOptValue();
-}
-
 void init(int argc, char* argv[]) {
 	x_execs = 1;
 	k_max = p_medians = -1;
-	timeLimit = -1;
-	value_exact = -DBL_MAX;
+	timeLimit = 1;
+	improvement = 1;
+	read_initial_sulution = false;
+	write_solution = false;
 
 	static struct option long_options[] = {
 			{ "help", no_argument, 0, 'h' },
@@ -183,17 +138,17 @@ void init(int argc, char* argv[]) {
 			{ "constraints_file", required_argument, 0, 'c' },
 			{"p_median", required_argument, 0, 'p' },
 			{ "x_execs",required_argument, 0, 'x' },
-			{ "time_limit", required_argument, 0,'t' },
+			{ "time_limit", required_argument, 0,'t'},
 			{"distance_matrix", required_argument,0,'d'},
-			{"solution_file", required_argument,0,'s'},
-			{"value_exact", required_argument,0,'v'},
-			{"basd",required_argument,0,'b'}};
+			{"read_initial_solution", required_argument,0,'r'},
+			{"write_solution", required_argument,0,'w'}};
+
 	int option;
 	option = opterr = 0;
 
 	/* parse options using getopt */
 	while (true) {
-		option = getopt_long(argc, argv, "hk:a:i:c:p:x:t:d:s:v:b:", long_options,
+		option = getopt_long(argc, argv, "hk:a:i:c:p:x:t:d:r:w:", long_options,
 				nullptr);
 		if (option == -1)
 			break;
@@ -210,11 +165,14 @@ void init(int argc, char* argv[]) {
 		case 'a':
 			improvement = atoi(optarg);
 			break;
-		case 'b':
-			b = atoi(optarg);
-			break;
 		case 'x':
 			x_execs = atoi(optarg);
+			break;
+		case 'r':
+			read_initial_sulution = atoi(optarg) != 0;
+			break;
+		case 'w':
+			write_solution = atoi(optarg) != 0;
 			break;
 		case 'i':
 			instance_file = new char[256];
@@ -227,13 +185,6 @@ void init(int argc, char* argv[]) {
 		case 'd':
 			distances_file = new char[256];
 			strcpy(distances_file, optarg);
-			break;
-		case 's':
-			solution_file = new char[256];
-			strcpy(solution_file, optarg);
-			break;
-		case 'v':
-			value_exact = (double) atof(optarg);
 			break;
 		case 'h': /* help */
 			fprintf(stderr,
@@ -273,58 +224,4 @@ void init(int argc, char* argv[]) {
 				argv[0]);
 		exit(1);
 	}
-
-}
-
-void ARI(long double* ri, long double* ari, Solution* s, Performance* performance){
-
-	fstream fcin(solution_file);
-	if(!fcin.good()){
-		cout << "Solution file " << solution_file << " not found" << endl;
-		return;
-	}
-//    cout << "ok 2" << endl;
-	int *norm = new int[instance->getM()];
-	FOR(i,0,instance->getM()){
-		norm[i] = -1;
-	}
-	int pos = 0;
-	FOR(i,0,instance->getM()){
-		if(s->getPos()[i] < instance->getP() && norm[i] == -1){
-			norm[i] = pos++;
-		}
-	}
-
-	int old_N = instance->getOLD_N();
-	int* sol_vns = new int[old_N];
-	int* clusters = new int[old_N];
-
-	int* sol_correct = new int[old_N];
-	for(int i=0;i<old_N;i++){
-		fcin >> sol_correct[i];
-	}
-
-	int i=0;
-	FOR_EACH_P(list<Point*>, u, instance->getUsers()){
-		clusters[(*u)->getId()] = s->closest(i);
-		sol_vns[(*u)->getId()] = norm[clusters[(*u)->getId()]];
-		FOR_EACH_P(list<Point*>, u2, (*u)->getMembers()){
-			clusters[(*u2)->getId()] = clusters[(*u)->getId()];
-			sol_vns[(*u2)->getId()] = norm[clusters[(*u)->getId()]];
-		}
-		i++;
-	}
-
-//	cout << "\tMEDIAN\tVNS\tCORRETO" << endl;
-//	FOR(i,0,old_N){
-//		cout << "P" << i << "\t" << clusters[i] << "\t" << sol_vns[i] << "\t" << sol_correct[i] << endl;
-//	}
-//	cout << endl;
-
-//	cout << setprecision(2) << fixed << "ARI = " << performance->ARI(old_N,instance->getP(),sol_vns,sol_correct) << endl;
-	performance->ARI(ri,ari,old_N,instance->getP(),sol_vns,sol_correct);
-	delete[] norm;
-	delete[] sol_vns;
-	delete[] clusters;
-	delete[] sol_correct;
 }

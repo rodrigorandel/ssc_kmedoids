@@ -11,16 +11,16 @@
 #include <iostream>
 #include <iomanip>
 #include "Helper.h"
+#include <chrono>
 
 using namespace std;
 
-Vns::Vns(Instance* inst, Constraints* constraints, Performance* perfor) {
+Vns::Vns(Instance* inst, Constraints* constraints) {
 	N = inst->getN();
 	M = inst->getM();
 	P = inst->getP();
 
 	bestImprovement = false;
-	isRestore = isShaking = isLocalSearch = false;
 
 	affected = new bool[N];
 	loss = new double[M];
@@ -32,12 +32,9 @@ Vns::Vns(Instance* inst, Constraints* constraints, Performance* perfor) {
 			entitiesWithCL.push_back(i);
 		}
 	}
-
-	performance = perfor;
 	current = new Solution(inst, constraints);
 	feasible = new Solution(inst, constraints);
 	best = nullptr;
-	bestTime = -1;
 	t_max = -1;
 }
 
@@ -51,58 +48,37 @@ Vns::~Vns() {
 }
 
 void Vns::run(Solution* bestFeasible, int KMAX, bool bestImprovement, int seed,
-		double timeLimit) {
-	initVNS(bestFeasible, bestImprovement, seed, timeLimit);
+		double timeLimit, bool read_initial_sulution) {
+	initVNS(bestFeasible, bestImprovement, seed, timeLimit, read_initial_sulution);
 	int k = 1;
 	bool improved;
-	performance->clockTotal.Start();
+	int iter_without_improvment = 0;
 	do {
-		performance->count_iterations_vns++;
-//        cout << performance->count_iterations_vns << endl;
 		/** ============= SHAKING ============== **/
-		performance->clockShaking.Start();
 		shaking(k);
-//		performance->clockShaking.Stop();
 		/** ============= END SHAKING ============== **/
 
+
 		/** ============= LOCAL SEARCH ============== **/
-		performance->clockLocalSearch.Start();
 		improved = localSearch();
-		performance->clockLocalSearch.Stop();
+
+		if(!improved){
+			iter_without_improvment++;
+		}else{
+//			cout << "melhorou " << iter_without_improvment << endl;
+			iter_without_improvment = 0;
+		}
+
 		/** ============= END LOCAL SEARCH ============== **/
 		k = (improved || k >= KMAX) ? 1 : k + 1;
 
-	}
-//	while(performance->clockTotal.GetTime() < t_max);
-	while ((performance->clockFeasibility.GetTime()
-			+ performance->clockLocalSearch.GetTime()
-			+ performance->clockShaking.GetTime()
-			+ performance->clockUpdatingBlocked.GetTime()) < t_max);
-
-	performance->clockTotal.Stop();
-	performance->totalTime += performance->clockTotal.GetTime();
-	performance->alocation += performance->clockUpdatingBlocked.GetTime();
-	performance->shaking += performance->clockShaking.GetTime();
-	performance->restoring += performance->clockFeasibility.GetTime();
-	performance->searching += performance->clockLocalSearch.GetTime();
-
-	performance->bestSolutionsCosts += best->getCost();
-	performance->bestSolutionsTimes += bestTime;
-	if (best->getCost() < performance->bestCost) {
-		performance->bestCost = best->getCost();
-	}
-	if (bestTime < performance->bestTime) {
-		performance->bestTime = bestTime;
-	}
+	} while (iter_without_improvment <= timeLimit);
+//	cout << "chegou aqui " << iter_without_improvment <<  " " << timeLimit << endl;
 }
 
 void Vns::shaking(int k) {
 	*current = *best;
-//	cout << "ANTES" << endl;
-//	current->print();
 	verify(current);
-//	cout << "\n DEPOIS " << endl;
-//	current->print();
 	FOR(i,0,k){
 		int fi = current->getFacilities()[bibrand.get_rand_ij(P,M - 1)];
 		int fr = current->getFacilities()[bibrand.get_rand_ij(0,P - 1)];
@@ -110,21 +86,16 @@ void Vns::shaking(int k) {
 		update(current, fi, fr);
 	}
 
-	performance->clockShaking.Stop();
 	/** ============= RESTORE FEASIBILITY ============== **/
 	if(!current->isFeasible()){
-		performance->clockFeasibility.Start();
 		restore(current);
-		performance->clockFeasibility.Stop();
 	}else{
 		if(*current < *best){
 			*best = *current;
 		}
-		performance->count_already_feasible++;
 	}
 	/** ============= END FEASIBILITY ============== **/
 
-//	performance->clockShaking.Start();
 }
 
 bool Vns::localSearch() {
@@ -153,26 +124,15 @@ bool Vns::localSearch() {
 		gain[fr] = 0;
 		loss[fi] = 0;
 
-
-		performance->clockLocalSearch.Stop();
 		/** ============= RESTORE FEASIBILITY ============== **/
 		if(!current->isFeasible()){
-			performance->clockFeasibility.Start();
 			improved = restore(current);
-			performance->clockFeasibility.Stop();
 		}else{
 			if(*current < *best){
 				*best = *current;
 			}
-			performance->count_already_feasible++;
 		}
 		/** ============= END FEASIBILITY ============== **/
-		time = performance->clockFeasibility.GetTime()
-				+ performance->clockLocalSearch.GetTime()
-				+ performance->clockShaking.GetTime()
-				+ performance->clockUpdatingBlocked.GetTime();
-
-		performance->clockLocalSearch.Start();
 	}
 	return improved;
 }
@@ -182,17 +142,10 @@ bool Vns::restore(Solution *sm){
 	*feasible = *sm;
 	restoreFeasibility(feasible,sm);
 	if (feasible->isFeasible()) {
-		performance->count_feasibility_restored++;
 		if (*feasible < *best || !best->isFeasible()) {
 			*best = *feasible;
-			bestTime = performance->clockFeasibility.GetTime()
-					+ performance->clockLocalSearch.GetTime()
-					+ performance->clockShaking.GetTime()
-					+ performance->clockUpdatingBlocked.GetTime();
 			improved = true;
 		}
-	} else {
-		performance->count_feasibility_fail++;
 	}
 	return improved;
 }
@@ -402,32 +355,7 @@ void Vns::restoreFeasibility(Solution* s, Solution* sm) {
 }
 
 void Vns::setClosest(Solution* s, int u, int f) {
-
-	if(performance->clockLocalSearch.isRunning()){
-		isLocalSearch = true;
-		performance->clockLocalSearch.Stop();
-	}else if(performance->clockFeasibility.isRunning()){
-		isRestore = true;
-		performance->clockFeasibility.Stop();
-	}else if(performance->clockShaking.isRunning()){
-		isShaking = true;
-		performance->clockShaking.Stop();
-	}
-
-	performance->clockUpdatingBlocked.Start();
 	s->setClosest(u, f);
-	performance->clockUpdatingBlocked.Stop();
-
-	if(isLocalSearch){
-		isLocalSearch = false;
-		performance->clockLocalSearch.Start();
-	}else if(isRestore){
-		isRestore = false;
-		performance->clockFeasibility.Start();
-	}else if(isShaking){
-		isShaking = false;
-		performance->clockShaking.Start();
-	}
 }
 
 void Vns::verify(Solution* s) {
@@ -455,33 +383,22 @@ void Vns::verify(Solution* s) {
 
 }
 
-void Vns::initVNS(Solution* bestFeasible, bool bestImprovement, int seed, double timeLimit) {
+void Vns::initVNS(Solution* bestFeasible, bool bestImprovement, int seed, double timeLimit, bool read_initial_sulution) {
 
 	this->bestImprovement = bestImprovement;
 	bibrand = Bibrand(seed);
-	bestTime = DBL_MAX;
 	t_max = timeLimit;
 
 	best = bestFeasible;
-    
+//    if(!read_initial_sulution){
+//	cout << "vai criar base solution ";
 	best->createRandomSolution(&bibrand);
+//	cout << best->getCost() << endl;
+//    }
     
 	if(!best->isFeasible()){
-//        cout << "vai restorar" << endl;
 		restore(best);
-//        cout << "restourou " << endl;
-		if(best->isFeasible()){
-			bestTime = 0;
-		}
-	}else{
-		bestTime = 0;
-		performance->count_already_feasible++;
 	}
-	performance->clockTotal.Reset();
-	performance->clockUpdatingBlocked.Reset();
-	performance->clockShaking.Reset();
-	performance->clockFeasibility.Reset();
-	performance->clockLocalSearch.Reset();
 
 #ifdef DEBUG
 	cout << "\n\nINITIAL SOLUTION" << endl;

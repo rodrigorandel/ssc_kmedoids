@@ -29,7 +29,7 @@ Solution::Solution(Instance* inst, Constraints* constr) {
 	{
 		blocked[i] = new bool[instance->getM()];
 	}
-	cost = 0;
+	cost = DBL_MAX;
 	time_found = 0;
 	feasible = false;
 }
@@ -283,6 +283,26 @@ void Solution::createRandomSolution(Bibrand* bibrand) {
 	}
 }
 
+void Solution::updateFeasibility(){
+	FOR(u,0,instance->getN()){
+		FOR(j,0,instance->getM()){
+			blocked[u][j] = false;
+		}
+	}
+	FOR(u,0,instance->getN()){
+		FOR_EACH_P(list<int>,cnl,getConstraints()->getCannotLink(u)){
+			blocked[u][c1[*cnl]] = true;
+			//			cout << "Blocking " << u << " from " << c1[*cnl] << " because of " << *cnl << endl;
+		}
+	}
+
+	feasible = true;
+	FOR(u,0,instance->getN()){
+		if(blocked[u][c1[u]]){
+			feasible = false;
+		}
+	}
+}
 
 int Solution::maxDiameter(int* u1, int* u2, double* maxDist) {
 	*maxDist = -1;

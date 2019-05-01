@@ -8,44 +8,46 @@
 #ifndef VNS_H_
 #define VNS_H_
 
+
 #include <vector>
 
 #include "bibrand2.h"
 #include "Constraints.h"
 #include "Extra.h"
 #include "Instance.h"
-#include "Performance.h"
 #include "Solution.h"
+
+
 
 using namespace std;
 
 class Vns {
 public:
-	Vns(Instance* inst, Constraints* constraints, Performance* performance);
+	Vns(Instance* inst, Constraints* constraints);
 	~Vns();
 	void run(Solution* bestFeasible, int KMAX, bool bestImprovement, int seed,
-			double timeLimit);
+			double timeLimit, bool read_initial_sulution);
 
 private:
+
+
 	int N, M, P;
 	Solution *current, *best, *feasible;
 	bool* affected;
 	double *loss, *gain;
 	Extra* extra;
-	Performance* performance;
 	Bibrand bibrand;
 	vector<int> entitiesWithCL;
-	double bestTime;
+
 	double t_max;
 	bool bestImprovement;
 
-	bool isRestore, isShaking, isLocalSearch;
 
 
 	void shaking(int k);
 	void verify(Solution* s);
 	void initVNS(Solution *best, bool bestImprovement, int seed,
-			double timeLimit);
+			double timeLimit, bool read_initial_sulution);
 	bool restore(Solution *s);
 
 	void initLocalSearch();

@@ -15,33 +15,7 @@
 
 using namespace std;
 
-void norm(list<Point*>* points, int S){
-	vector<double> max(S,0);
-	FOR_EACH_P(list<Point*>,i,points){
-		FOR(s,0,S){
-			if((*i)->getCoord(s) > max[s]){
-				max[s] = (*i)->getCoord(s);
-			}
 
-			if((*i)->getCoord(s) < 0){
-				cout << endl << endl <<"-------- NEGATIVO ------- " << endl;
-				exit(1);
-			}
-		}
-	}
-
-	cout << points->size() << " " << S << endl;
-	FOR_EACH_P(list<Point*>,i,points){
-		FOR(s,0,S){
-			if(max[s] == 0){
-				cout << "0\t";
-			}else{
-				cout << setprecision(3) << fixed << (*i)->getCoord(s)/max[s] << "\t";
-			}
-		}
-		cout << endl;
-	}
-}
 
 
 Instance::Instance(char *instance_file, int p, char * distances_file) {
